@@ -1,10 +1,12 @@
 <script>
 	import Header from './Header.svelte';
 	import '../app.css';
+	import { enhance } from '$app/forms';
+	const {data} = $props();
 </script>
 
 <div class="app">
-	<Header />
+	<Header {data} />
 
 	<main>
 		<slot />

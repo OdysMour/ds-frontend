@@ -2,6 +2,8 @@
 	import { page } from '$app/stores';
 	import logo from '$lib/images/svelte-logo.svg';
 	import github from '$lib/images/github.svg';
+	export let data;
+	const {authToken='empty'} = data;
 </script>
 
 <header>
@@ -22,8 +24,8 @@
 			<li aria-current={$page.url.pathname === '/about' ? 'page' : undefined}>
 				<a href="/about">About</a>
 			</li>
-			<li aria-current={$page.url.pathname.startsWith('/sverdle') ? 'page' : undefined}>
-				<a href="/sverdle">Sverdle</a>
+			<li aria-current={$page.url.pathname.startsWith('/animals') ? 'page' : undefined}>
+				<a href="/animals">Animals</a>
 			</li>
 		</ul>
 		<svg viewBox="0 0 2 3" aria-hidden="true">
@@ -35,6 +37,13 @@
 		<a href="https://github.com/sveltejs/kit">
 			<img src={github} alt="GitHub" />
 		</a>
+		{#if authToken}
+		<a href="/profile">Profile</a>
+		<a href="/signout">Logout</a>
+		{:else}
+		<a href="/signin">Login</a>
+		<a href="/signup">Register</a>
+		{/if}
 	</div>
 </header>
 

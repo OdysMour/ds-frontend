@@ -3,6 +3,7 @@ import type { Actions } from './$types';
 
 export const actions: Actions = {
     login: async ({ request, cookies }) => {
+        console.log("Logging in");
         const formData = await request.formData();
         const username = formData.get('username');
         const password = formData.get('password');

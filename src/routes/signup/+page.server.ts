@@ -11,6 +11,7 @@ import type { Action, Actions, PageServerLoad } from './$types';
 
 export const actions = {
   register: async ({ request }) => {
+    console.log("Registering user");
     // TODO register the user
     const data = await request.formData();
     const username = data.get('username');
