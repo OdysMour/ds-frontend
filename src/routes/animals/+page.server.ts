@@ -1,67 +1,88 @@
-import type { RequestHandler } from '@sveltejs/kit';
-import type { Actions } from './$types';
+import { error } from '@sveltejs/kit';
+import { createRateLimitedFetch } from '$lib/rateLimiter';
+import { env } from '$env/dynamic/public';
 
-export const load = async ({ cookies }) => {
-    try {
-        console.log("Fetching animals");
-        const token = cookies.get('authToken'); // Get token from cookies
-
-        const response = await fetch('http://localhost:9090/api/animals', {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}` // Add token to headers
-            }
-        });
-        //console.log(response);
-        if (response.ok) {
-            const animalsData = await response.json();
-            console.log(animalsData);
-            return {
-                animalsData,
-                token
-            };
-        } else {
-            console.log("Failed to fetch animals");
-            return {
-                status: 500,
-                body: { error: 'Failed to fetch animals' }
-            };
-        }
-    } catch (error) {
-        return {
-            status: 500,
-            body: { error: 'Failed to fetch animals' }
-        };
+export const load = async ({ cookies, fetch }) => {
+  try {
+    const authToken = cookies.get('authToken');
+    console.log('[Animals Load] Checking auth token:', authToken ? 'Present' : 'Missing');
+    
+    if (!authToken) {
+      throw error(401, 'Unauthorized');
     }
+
+    const rateLimitedFetch = createRateLimitedFetch({ fetchFn: fetch });
+    console.log('[Animals Load] Making request to:', `${env.PUBLIC_API_URL}/api/animals`);
+
+    const response = await rateLimitedFetch(`${env.PUBLIC_API_URL}/api/animals`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      }
+    });
+
+    console.log('[Animals Load] Response status:', response.status);
+    console.log('[Animals Load] Response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        console.error('[Animals Load] Rate limit exceeded');
+        throw error(429, 'Too many requests. Please try again later.');
+      }
+      console.error('[Animals Load] Request failed:', {
+        status: response.status,
+        statusText: response.statusText
+      });
+      throw error(response.status, 'Failed to fetch animals');
+    }
+
+    const animals = await response.json();
+    console.log('[Animals Load] Successfully loaded animals count:', animals.length);
+    return { animals };
+  } catch (err: any) {
+    console.error('[Animals Load] Error details:', {
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack,
+      cause: err?.cause
+    });
+    throw error(500, 'Failed to load animals');
+  }
 };
-export const actions: Actions = {
-    addAnimal: async ({ request, cookies }) => {
-        console.log("Adding animal");
-        const formData = await request.formData();
-        const sex = formData.get('sex');
-        const animalSpecies = formData.get('animalSpecies');
-        const birthDate = formData.get('birthDate');
-        const microchip = formData.get('microchip');
 
-        const token = cookies.get('authToken'); // Get token from cookies
+export const actions = {
+  create: async ({ request, cookies, fetch }) => {
+    try {
+      const formData = await request.formData();
+      const animalData = Object.fromEntries(formData);
 
-        const response = await fetch('http://localhost:9090/api/animals', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`, // Add token to headers
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ sex, animalSpecies, birthDate, microchip })
-        });
+      const authToken = cookies.get('authToken');
+      if (!authToken) {
+        throw error(401, 'Unauthorized');
+      }
 
-        if (response.ok) {
-            const data = await response.json();
-            console.log(data);
-            console.log("Animal added successfully");
-            return { success: 'Animal added successfully' };
-        } else {
-            console.log("Failed to add animal");
-            return { error: 'Failed to add animal' };
+      const rateLimitedFetch = createRateLimitedFetch({ fetchFn: fetch });
+  
+      const response = await rateLimitedFetch(`${env.PUBLIC_API_URL}/api/animals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(animalData)
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw error(429, 'Too many requests. Please try again later.');
         }
+        throw error(response.status, 'Failed to create animal');
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('Error creating animal:', err);
+      throw error(500, 'Failed to create animal');
     }
+  }
 };

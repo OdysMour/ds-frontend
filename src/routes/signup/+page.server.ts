@@ -1,52 +1,87 @@
-import { error, fail, redirect } from '@sveltejs/kit';
-import type { Action, Actions, PageServerLoad } from './$types';
-
-/* export const load: PageServerLoad = async (session) => {
-  var sessionData = session.cookies.get('session');
-  if (sessionData) {
-    return redirect(303, '/');
-  }
-  return {};
-}; */
+import { redirect, fail } from '@sveltejs/kit';
+import type { Actions } from './$types';
+import { signupSchema } from '$lib/schemas';
+import { ZodError } from 'zod';
+import { apiCall } from '$lib/config';
 
 export const actions = {
-  register: async ({ request }) => {
-    console.log("Registering user");
-    // TODO register the user
-    const data = await request.formData();
-    const username = data.get('username');
-    const email = data.get('email');
-    const password = data.get('password');
+  default: async ({ request }) => {
+    const formData = await request.formData();
+    const data = Object.fromEntries(formData);
 
-    if (typeof username !== 'string' || typeof email !== 'string' || typeof password !== 'string' || !username || !password || !email) {
-      return error(400, 'Username, Email and Password must be a string');
+    try {
+      const validatedData = signupSchema.parse(data);
+      
+      try {
+        const result = await apiCall('api/auth/signup', {
+          method: 'POST',
+          body: {
+            firstName: validatedData.firstName,
+            lastName: validatedData.lastName,
+            email: validatedData.email,
+            password: validatedData.password,
+            username: validatedData.username || undefined,
+            role: ['user'] // Send as array since it will be converted to Set in backend
+          }
+        });
+
+        console.log('Signup response:', result);
+        
+        // If we reach here, the registration was successful because apiCall will throw on error responses
+
+      } catch (error: any) {
+        console.error('Signup error details:', error);
+        
+        // Handle API errors
+        if (error.data?.errors?.length > 0) {
+          // Handle validation errors from backend
+          return fail(error.status || 400, {
+            data: { 
+              firstName: data.firstName,
+              lastName: data.lastName,
+              email: data.email,
+              username: data.username 
+            },
+            error: error.data.errors[0] // Use first error message
+          });
+        } else if (error.data?.message) {
+          // Handle other API errors with message
+          return fail(error.status || 400, {
+            data: { 
+              firstName: data.firstName,
+              lastName: data.lastName,
+              email: data.email,
+              username: data.username 
+            },
+            error: error.data.message
+          });
+        }
+        
+        // Handle unexpected errors
+        return fail(500, {
+          error: 'An unexpected error occurred. Please try again.'
+        });
+      }
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const errors = error.errors.reduce((acc: Record<string, string>, curr) => {
+          const path = curr.path[0];
+          acc[path.toString()] = curr.message;
+          return acc;
+        }, {});
+        
+        return fail(400, {
+          data,
+          errors
+        });
+      }
+      
+      // Handle other unexpected errors
+      console.error('Signup validation error:', error);
+      return fail(500, {
+        error: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'
+      });
     }
-    console.log(username, email, password);
-
-    const response = await fetch('http://localhost:9090/api/auth/signup', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ username, email, password })
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log(data);
-
-      // Redirect to the dashboard or another protected route
-      throw redirect(302, '/signin');
-    } else {
-      // Handle signup error
-      const data = await response.json();
-
-      console.log(data);
-      return fail(400, { error: 'Registration failed' });
-    }
-
+    return redirect(303, '/signin');
   }
 } satisfies Actions;
-
-
-
