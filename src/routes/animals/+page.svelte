@@ -103,7 +103,11 @@
                         </span>
                       </td>
                       <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                        <a href="/animals/{animal.id}" class="text-indigo-600 hover:text-indigo-900">
+                        <a
+                          href="/animals/{animal.id}"
+                          data-sveltekit-preload-data
+                          class="text-indigo-600 hover:text-indigo-900"
+                        >
                           View<span class="sr-only">, {animal.name}</span>
                         </a>
                       </td>

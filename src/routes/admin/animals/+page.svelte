@@ -1,57 +1,22 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { getAllAnimals, deleteAnimal, updateAnimalHealth } from '$lib/api/animals';
+  import { enhance } from '$app/forms';
+  import { invalidateAll } from '$app/navigation';
   import type { Animal } from '$lib/types';
+  import type { PageData } from './$types';
 
-  export let data;
-  const token = data.user?.token;
+  export let data: PageData;
+  const animals: Animal[] = data.animals || [];
 
-  let animals: Animal[] = [];
-  let loading = true;
+  let loading = false;
   let error: string | null = null;
   let healthStatusEdit: { [key: number]: string } = {};
   let editingHealth: number | null = null;
 
-  onMount(async () => {
-    try {
-      animals = await getAllAnimals(token);
-      // Initialize health status edit values
-      animals.forEach(animal => {
-        healthStatusEdit[animal.id] = animal.healthStatus;
-      });
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load animals';
-    } finally {
-      loading = false;
-    }
-  });
-
-  async function handleHealthUpdate(animal: Animal) {
-    if (!healthStatusEdit[animal.id]?.trim()) {
-      error = 'Health status cannot be empty';
-      return;
-    }
-
-    try {
-      const updatedAnimal = await updateAnimalHealth(animal.id, healthStatusEdit[animal.id], token);
-      animals = animals.map(a => a.id === animal.id ? updatedAnimal : a);
-      editingHealth = null;
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to update health status';
-    }
-  }
-
-  async function handleDelete(animal: Animal) {
-    if (!confirm(`Are you sure you want to delete animal ${animal.name}?`)) {
-      return;
-    }
-
-    try {
-      await deleteAnimal(animal.id, token);
-      animals = animals.filter(a => a.id !== animal.id);
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to delete animal';
-    }
+  // Initialize health status edit values
+  $: {
+    animals.forEach((animal: Animal) => {
+      healthStatusEdit[animal.id] = animal.healthStatus;
+    });
   }
 
   function formatDate(dateString: string): string {
@@ -137,28 +102,48 @@
                     </td>
                     <td class="whitespace-normal px-3 py-4 text-sm text-gray-500 max-w-xs">
                       {#if editingHealth === animal.id}
-                        <div class="flex items-center gap-2">
-                          <input
-                            type="text"
-                            bind:value={healthStatusEdit[animal.id]}
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                          />
-                          <button
-                            on:click={() => handleHealthUpdate(animal)}
-                            class="inline-flex items-center rounded border border-transparent bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                          >
-                            Save
-                          </button>
-                          <button
-                            on:click={() => {
-                              editingHealth = null;
-                              healthStatusEdit[animal.id] = animal.healthStatus;
-                            }}
-                            class="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                        <form
+                          method="POST"
+                          action="?/updateHealth"
+                          use:enhance={() => {
+                            loading = true;
+                            return async ({ result }) => {
+                              loading = false;
+                              if (result.type === 'error') {
+                                error = result.error?.message;
+                              } else {
+                                editingHealth = null;
+                                await invalidateAll();
+                              }
+                            };
+                          }}
+                        >
+                          <input type="hidden" name="animalId" value={animal.id} />
+                          <div class="flex items-center gap-2">
+                            <input
+                              type="text"
+                              name="healthStatus"
+                              bind:value={healthStatusEdit[animal.id]}
+                              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            />
+                            <button
+                              type="submit"
+                              class="inline-flex items-center rounded border border-transparent bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              on:click={() => {
+                                editingHealth = null;
+                                healthStatusEdit[animal.id] = animal.healthStatus;
+                              }}
+                              class="inline-flex items-center rounded border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
                       {:else}
                         <div class="flex items-center gap-2">
                           <span>{animal.healthStatus}</span>
@@ -182,12 +167,32 @@
                         >
                           Edit
                         </a>
-                        <button
-                          on:click={() => handleDelete(animal)}
-                          class="text-red-600 hover:text-red-900"
+                        <form
+                          method="POST"
+                          action="?/delete"
+                          use:enhance={() => {
+                            if (!confirm(`Are you sure you want to delete animal ${animal.name}?`)) {
+                              return;
+                            }
+                            loading = true;
+                            return async ({ result }) => {
+                              loading = false;
+                              if (result.type === 'error') {
+                                error = result.error?.message;
+                              } else {
+                                await invalidateAll();
+                              }
+                            };
+                          }}
                         >
-                          Delete
-                        </button>
+                          <input type="hidden" name="animalId" value={animal.id} />
+                          <button
+                            type="submit"
+                            class="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </form>
                       </div>
                     </td>
                   </tr>

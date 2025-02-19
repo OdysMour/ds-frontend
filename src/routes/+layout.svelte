@@ -54,6 +54,14 @@ onMount(() => {
                   Admin Dashboard
                 </a>
               {/if}
+              {#if $user.roles?.includes('ROLE_VET') || $user.roles?.includes('ROLE_ADMIN')}
+                <a
+                  href="/vet/animals"
+                  class="nav-link {$page.url.pathname.startsWith('/vet') ? 'active' : ''}"
+                >
+                  Vet Dashboard
+                </a>
+              {/if}
               <a
                 href="/profile"
                 class="nav-link {$page.url.pathname === '/profile' ? 'active' : ''}"

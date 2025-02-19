@@ -45,7 +45,7 @@ export const animalSchema = z.object({
   }),
   breed: z.string().optional(),
   birthDate: z.string().datetime().optional(),
-  microchip: z.number().optional(),
+  microchip: z.string().optional(),
   healthStatus: z.string().optional(),
   createdBy: z.string().optional(),
   createdAt: z.string().datetime().optional(),

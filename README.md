@@ -108,6 +108,29 @@ bun run format      # Format code with Prettier
 - System-wide animal management
 - Access control management
 
+## Available Routes
+
+### Public Routes
+- `/` - Home page
+- `/signin` - User login page
+- `/signup` - New user registration
+- `/signout` - User logout page
+- `/profile` - User profile management
+
+### Animal Management Routes
+- `/animals` - List all available animals
+- `/animals/[id]` - View specific animal details
+- `/animals/new` - Create new animal entry
+
+### Admin Routes
+- `/admin/animals` - Admin animal management dashboard
+- `/admin/animals/new` - Create new animal (admin)
+- `/admin/users` - User management dashboard
+
+### Veterinarian Routes
+- `/vet/animals` - Veterinarian animal dashboard
+- `/vet/animals/[id]` - Animal health management
+
 ## Component Development
 
 ### Styling

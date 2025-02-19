@@ -4,10 +4,13 @@ import { apiCall } from '$lib/config';
 import { makeApiUrl } from '$lib/config';
 
 // Protected routes that require authentication
-const protectedRoutes = ['/profile', '/animals', '/admin'];
+const protectedRoutes = ['/profile', '/animals', '/animals/', '/admin', '/vet'];
 
 // Routes that require admin role
 const adminRoutes = ['/admin'];
+
+// Routes that require vet role
+const vetRoutes = ['/vet'];
 
 // Create rate limited fetch instance for server-side calls
 const rateLimitedFetch = createRateLimitedFetch({
@@ -62,6 +65,19 @@ export const handle: Handle = async ({ event, resolve }) => {
         throw redirect(303, `/?message=${encodeURIComponent('Access denied: Admin privileges required')}`);
       }
     }
+
+    // For vet routes, check if user has vet role or admin role
+    if (vetRoutes.some(route => url.pathname.startsWith(route))) {
+      const roles = JSON.parse(userRoles || '[]');
+      console.log('[Server] Vet route check:', {
+        path: url.pathname,
+        userRoles: roles
+      });
+      if (!roles.includes('ROLE_VET') && !roles.includes('ROLE_ADMIN')) {
+        console.log('[Server] Access denied: Not vet or admin');
+        throw redirect(303, `/?message=${encodeURIComponent('Access denied: Veterinarian privileges required')}`);
+      }
+    }
   }
 
   // For all routes, if we have an auth token, validate it
@@ -77,12 +93,18 @@ export const handle: Handle = async ({ event, resolve }) => {
         }
       });
 
-      if (!response.ok) {
-        console.error('[Server] Token verification failed:', response.status);
-        throw new Error(`Token verification failed: ${response.status}`);
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        console.error('[Server] Failed to parse verification response:', e);
+        throw new Error(`Token verification failed: Invalid response format`);
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        console.error('[Server] Token verification failed:', { status: response.status, data });
+        throw new Error(`Token verification failed: ${response.status}`);
+      }
       console.log('[Server] Token verified successfully');
 
       // Only set user data if verification succeeded
@@ -105,22 +127,26 @@ export const handle: Handle = async ({ event, resolve }) => {
       }
     } catch (err: any) {
       console.error('[Server] Auth error:', err.message);
-      // Only clear cookies if it's not a rate limit error
-      if (!err.message?.includes('429') && !err.message?.includes('rate limit')) {
-        console.log('[Server] Clearing auth cookies due to error');
+      if (err.message?.includes('429') || err.message?.includes('rate limit')) {
+        console.log('[Server] Rate limit reached');
+        // For rate limit errors, keep the session but deny access temporarily
+        if (isProtectedRoute) {
+          throw redirect(303, `/signin?message=${encodeURIComponent('Too many requests. Please try again later.')}`);
+        }
+      } else if (err.message?.includes('401') || err.message?.includes('403')) {
+        // Only clear auth token for unauthorized/forbidden responses
+        console.log('[Server] Clearing auth token due to authorization error');
         cookies.delete('authToken', { path: '/' });
-        cookies.delete('userRoles', { path: '/' });
         
-        // Only redirect to signin if accessing protected route
         if (isProtectedRoute) {
           console.log('[Server] Redirecting to signin due to expired session');
           throw redirect(303, `/signin?message=${encodeURIComponent('Session expired. Please sign in again')}`);
         }
       } else {
-        console.log('[Server] Rate limit reached');
-        // For rate limit errors, keep the session but deny access temporarily
+        // For other errors, don't clear any cookies
+        console.error('[Server] Unexpected error during token verification');
         if (isProtectedRoute) {
-          throw redirect(303, `/signin?message=${encodeURIComponent('Too many requests. Please try again later.')}`);
+          throw redirect(303, `/signin?message=${encodeURIComponent('An error occurred. Please try again.')}`);
         }
       }
     }
